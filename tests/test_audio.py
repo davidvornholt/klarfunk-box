@@ -102,7 +102,7 @@ class TestPlayAnnouncement:
         mocker.patch("src.audio.mpv.MPV", mock_mpv_class)
 
         player = make_player()
-        audio_file = list(player._error_announcements.__dict__.values())[0]
+        audio_file = next(iter(player._error_announcements.__dict__.values()))
 
         # Run play_announcement in a thread so we can fire the callback
         result_holder = [None]

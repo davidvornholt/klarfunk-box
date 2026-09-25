@@ -213,11 +213,11 @@ def main() -> int:
     try:
         config = load_config(args.config)
         logger.info("Configuration loaded from %s", args.config)
-    except FileNotFoundError as e:
-        logger.exception("Configuration error: %s", e)
+    except FileNotFoundError:
+        logger.exception("Configuration error")
         return 1
-    except ValueError as e:
-        logger.exception("Invalid configuration: %s", e)
+    except ValueError:
+        logger.exception("Invalid configuration")
         return 1
 
     # Validate audio files exist
