@@ -270,6 +270,7 @@ class MpvAudioPlayer:
                 try:
                     playback_time = player.playback_time
                 except Exception:
+                    logger.debug("Could not read playback position", exc_info=True)
                     playback_time = None
 
                 if playback_time is None:
@@ -379,8 +380,8 @@ class MpvAudioPlayer:
                 return False
 
             return True
-        except Exception as e:
-            logger.exception("Failed to play announcement: %s", e)
+        except Exception:
+            logger.exception("Failed to play announcement")
             return False
         finally:
             if player is not None:
@@ -460,8 +461,8 @@ class MpvAudioPlayer:
                 with self._lock:
                     self._stop_internal(clear_desired=False)
 
-            except Exception as e:
-                logger.exception("MPV error on attempt %d: %s", attempt, e)
+            except Exception:
+                logger.exception("MPV error on attempt %d", attempt)
                 with self._lock:
                     self._stop_internal(clear_desired=False)
 
@@ -495,6 +496,7 @@ class MpvAudioPlayer:
             playback_time = self._player.playback_time
             return playback_time is not None
         except Exception:
+            logger.debug("Could not read playback position", exc_info=True)
             return False
 
     def _is_player_playing_instance(self, player: mpv.MPV) -> bool:
@@ -502,6 +504,7 @@ class MpvAudioPlayer:
             playback_time = player.playback_time
             return playback_time is not None
         except Exception:
+            logger.debug("Could not read playback position", exc_info=True)
             return False
 
     def play_announcement_with_stream_preload(
@@ -560,8 +563,8 @@ class MpvAudioPlayer:
 
             logger.info("Announcement playing, stream prefetching...")
 
-        except Exception as e:
-            logger.exception("Failed to start playlist playback: %s", e)
+        except Exception:
+            logger.exception("Failed to start playlist playback")
             # Clean up leaked player
             if player is not None:
                 with contextlib.suppress(mpv.ShutdownError, Exception):
