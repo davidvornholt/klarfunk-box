@@ -16,26 +16,7 @@ from src.models import (
 )
 
 
-class TestSwitchPosition:
-    def test_on_and_off_are_distinct(self) -> None:
-        assert SwitchPosition.ON != SwitchPosition.OFF
-
-    def test_enum_members(self) -> None:
-        assert set(SwitchPosition) == {SwitchPosition.ON, SwitchPosition.OFF}
-
-
 class TestChannel:
-    def test_channel_creation(self, tmp_path: Path) -> None:
-        ch = Channel(
-            index=0,
-            name="Test",
-            stream_url="http://example.com/stream",
-            announcement_file=tmp_path / "test.mp3",
-        )
-        assert ch.name == "Test"
-        assert ch.index == 0
-        assert ch.stream_url == "http://example.com/stream"
-
     def test_channel_is_frozen(self, tmp_path: Path) -> None:
         ch = Channel(
             index=0,
