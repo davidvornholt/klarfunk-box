@@ -9,7 +9,7 @@ import logging
 import socket
 import time
 from pathlib import Path
-from threading import Event, Lock, Thread
+from threading import Event, Lock, Thread, current_thread
 from typing import Protocol
 
 import mpv
@@ -212,6 +212,10 @@ class MpvAudioPlayer:
         self._watchdog_thread.start()
 
     def _stop_watchdog(self) -> None:
+        # Reconnects run on the watchdog thread itself. It cannot join itself
+        # and must keep running to supervise the reconnected stream.
+        if current_thread() is self._watchdog_thread:
+            return
         self._watchdog_stop.set()
         if self._watchdog_thread is not None:
             self._watchdog_thread.join(timeout=1.0)
@@ -294,6 +298,10 @@ class MpvAudioPlayer:
                 self._playback_error.clear()
                 self._playback_error_reason = None
                 self._handle_stream_stall(current_url)
+                # A reconnected stream restarts its playback position, so stall
+                # tracking must not compare it with the previous stream.
+                last_playback_time = None
+                last_progress_time = time.monotonic()
 
     def _handle_stream_stall(self, stream_url: str) -> None:
         self._stop_stream_for_reconnect()
