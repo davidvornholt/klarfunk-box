@@ -59,7 +59,6 @@ watchdog:
 wifi:
   nmcli_path: "nmcli"
   command_timeout_seconds: 5
-  connect_timeout_seconds: 20
 
 # Directory containing announcement audio files (relative to this config file)
 audio_dir: "../audio"
