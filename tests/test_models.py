@@ -34,7 +34,6 @@ class TestRadioState:
         return RadioState(
             selected_channel_index=0,
             switch_position=SwitchPosition.OFF,
-            is_stream_active=False,
         )
 
     def test_with_channel_returns_new_state(self, initial_state: RadioState) -> None:
@@ -48,7 +47,6 @@ class TestRadioState:
     ) -> None:
         new_state = initial_state.with_channel(3)
         assert new_state.switch_position == initial_state.switch_position
-        assert new_state.is_stream_active == initial_state.is_stream_active
 
     def test_with_switch_returns_new_state(self, initial_state: RadioState) -> None:
         new_state = initial_state.with_switch(SwitchPosition.ON)
@@ -60,12 +58,6 @@ class TestRadioState:
     ) -> None:
         new_state = initial_state.with_switch(SwitchPosition.ON)
         assert new_state.selected_channel_index == initial_state.selected_channel_index
-        assert new_state.is_stream_active == initial_state.is_stream_active
-
-    def test_with_stream_active(self, initial_state: RadioState) -> None:
-        new_state = initial_state.with_stream_active(True)
-        assert new_state.is_stream_active is True
-        assert initial_state.is_stream_active is False
 
     def test_state_is_frozen(self, initial_state: RadioState) -> None:
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -75,16 +67,10 @@ class TestRadioState:
         state = RadioState(
             selected_channel_index=0,
             switch_position=SwitchPosition.OFF,
-            is_stream_active=False,
         )
-        final = (
-            state.with_switch(SwitchPosition.ON)
-            .with_channel(2)
-            .with_stream_active(True)
-        )
+        final = state.with_switch(SwitchPosition.ON).with_channel(2)
         assert final.switch_position == SwitchPosition.ON
         assert final.selected_channel_index == 2
-        assert final.is_stream_active is True
         # Original untouched
         assert state.selected_channel_index == 0
 

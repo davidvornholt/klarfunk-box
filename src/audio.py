@@ -668,10 +668,19 @@ class MpvAudioPlayer:
     def is_playing(self) -> bool:
         """Check if stream is currently playing.
 
+        A connected stream counts only while mpv still reports a playback
+        position, so a stream that ended is not playing even before the
+        watchdog notices, or when the watchdog is disabled.
+
         Returns:
-            True if stream is active.
+            True if stream is active and mpv is playing it.
         """
-        return self._is_stream_active
+        player = self._player
+        return (
+            self._is_stream_active
+            and player is not None
+            and self._is_player_playing_instance(player)
+        )
 
     def cleanup(self) -> None:
         """Clean up resources."""

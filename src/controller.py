@@ -52,7 +52,6 @@ class RadioController:
         self._state = RadioState(
             selected_channel_index=config.default_channel_index,
             switch_position=SwitchPosition.OFF,
-            is_stream_active=False,
         )
         self._worker_thread: Thread | None = None
         self._worker_cancel = Event()
@@ -74,6 +73,16 @@ class RadioController:
         if 0 <= index < len(self._config.channels):
             return self._config.channels[index]
         return None
+
+    def _is_channel_running(self) -> bool:
+        """Check whether the selected channel is starting or actually playing.
+
+        Asks the worker and the player for their live state instead of
+        keeping a flag, which would stay set after the stream dies.
+        """
+        worker = self._worker_thread
+        is_starting = worker is not None and worker.is_alive()
+        return is_starting or self._audio.is_playing()
 
     def _dispatch(self, task: Callable[[], None]) -> None:
         """Cancel current work and dispatch a new audio task to the worker.
@@ -108,9 +117,6 @@ class RadioController:
 
         if self._worker_cancel.is_set():
             return
-
-        with self._lock:
-            self._state = self._state.with_stream_active(success)
 
         if not success:
             logger.error("Failed to start stream for channel: %s", channel.name)
@@ -154,12 +160,13 @@ class RadioController:
                 logger.debug("Ignoring channel button - switch is OFF")
                 return
 
-            # Ignore if same channel already playing
+            # Ignore a repeated press so it does not interrupt the radio, but
+            # restart the channel when its stream has died
             if (
                 self._state.selected_channel_index == channel_index
-                and self._state.is_stream_active
+                and self._is_channel_running()
             ):
-                logger.debug("Ignoring channel button - already playing this channel")
+                logger.debug("Ignoring channel button - channel is playing or starting")
                 return
 
             channel = self._get_channel(channel_index)
@@ -208,8 +215,6 @@ class RadioController:
         """Worker task: stop playback and play goodbye announcement."""
         self._audio.stop()
         self._audio.play_goodbye_announcement()
-        with self._lock:
-            self._state = self._state.with_stream_active(False)
 
     def handle_shutdown_request(self) -> None:
         """Handle shutdown request from long-press on channel 1 button.

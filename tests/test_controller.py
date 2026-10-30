@@ -14,6 +14,14 @@ from src.models import RadioState, SwitchPosition
 from tests.conftest import make_app_config
 
 
+def wait_for_worker(controller: RadioController) -> None:
+    """Wait until the dispatched audio task has finished."""
+    worker = controller._worker_thread
+    assert worker is not None
+    worker.join(timeout=2.0)
+    assert not worker.is_alive()
+
+
 @pytest.fixture
 def controller_deps(tmp_audio_files: dict[str, Path]) -> dict[str, object]:
     """Create controller with all mocked dependencies."""
@@ -47,7 +55,6 @@ class TestInitialState:
         state = controller.state
         assert state.selected_channel_index == 0
         assert state.switch_position == SwitchPosition.OFF
-        assert state.is_stream_active is False
 
 
 class TestHandleStartup:
@@ -74,17 +81,24 @@ class TestHandleStartup:
 
 
 class TestHandleChannelButton:
-    def test_changes_channel(self, controller_deps: dict) -> None:
+    def test_switches_to_other_channel_while_playing(
+        self, controller_deps: dict
+    ) -> None:
         controller = controller_deps["controller"]
-
-        # Set switch to ON first
+        audio = controller_deps["audio"]
+        channel = controller_deps["config"].channels[1]
+        audio.is_playing.return_value = True
         controller.handle_switch_change(SwitchPosition.ON)
-        time.sleep(0.1)
+        wait_for_worker(controller)
+        audio.play_announcement_with_stream_preload.reset_mock()
 
         controller.handle_channel_button(1)
-        time.sleep(0.3)
+        wait_for_worker(controller)
 
         assert controller.state.selected_channel_index == 1
+        audio.play_announcement_with_stream_preload.assert_called_once_with(
+            channel.announcement_file, channel.stream_url
+        )
 
     def test_ignored_when_switch_off(self, controller_deps: dict) -> None:
         controller = controller_deps["controller"]
@@ -95,21 +109,63 @@ class TestHandleChannelButton:
 
         assert not audio.play_announcement_with_stream_preload.called
 
-    def test_ignored_same_channel_active(self, controller_deps: dict) -> None:
+    def test_ignored_while_selected_channel_plays(self, controller_deps: dict) -> None:
         controller = controller_deps["controller"]
         audio = controller_deps["audio"]
-
-        # Manually set state to ON with active stream on channel 0
-        controller._state = RadioState(
-            selected_channel_index=0,
-            switch_position=SwitchPosition.ON,
-            is_stream_active=True,
-        )
-        audio.reset_mock()
+        audio.is_playing.return_value = True
+        controller.handle_switch_change(SwitchPosition.ON)
+        wait_for_worker(controller)
+        audio.stop.reset_mock()
+        audio.play_announcement_with_stream_preload.reset_mock()
 
         controller.handle_channel_button(0)
 
+        audio.stop.assert_not_called()
         audio.play_announcement_with_stream_preload.assert_not_called()
+
+    def test_ignored_while_selected_channel_starts(self, controller_deps: dict) -> None:
+        controller = controller_deps["controller"]
+        audio = controller_deps["audio"]
+        announcing = Event()
+        connected = Event()
+
+        def announce_and_connect(*_args: object) -> bool:
+            announcing.set()
+            return connected.wait(timeout=5.0)
+
+        audio.play_announcement_with_stream_preload.side_effect = announce_and_connect
+        controller.handle_switch_change(SwitchPosition.ON)
+        assert announcing.wait(timeout=2.0)
+        audio.stop.reset_mock()
+
+        # A second press during the channel announcement must not restart it
+        controller.handle_channel_button(0)
+        connected.set()
+        wait_for_worker(controller)
+
+        audio.stop.assert_not_called()
+        audio.play_announcement_with_stream_preload.assert_called_once()
+
+    def test_restarts_selected_channel_after_stream_died(
+        self, controller_deps: dict
+    ) -> None:
+        controller = controller_deps["controller"]
+        audio = controller_deps["audio"]
+        channel = controller_deps["config"].channels[0]
+        audio.is_playing.return_value = True
+        controller.handle_switch_change(SwitchPosition.ON)
+        wait_for_worker(controller)
+        audio.play_announcement_with_stream_preload.reset_mock()
+
+        # The stream dies later, for example after the network dropped
+        audio.is_playing.return_value = False
+        controller.handle_channel_button(0)
+        wait_for_worker(controller)
+
+        assert controller.state.selected_channel_index == 0
+        audio.play_announcement_with_stream_preload.assert_called_once_with(
+            channel.announcement_file, channel.stream_url
+        )
 
     def test_invalid_index_no_crash(self, controller_deps: dict) -> None:
         controller = controller_deps["controller"]
@@ -119,7 +175,6 @@ class TestHandleChannelButton:
         controller._state = RadioState(
             selected_channel_index=0,
             switch_position=SwitchPosition.ON,
-            is_stream_active=False,
         )
 
         controller.handle_channel_button(99)
@@ -145,7 +200,6 @@ class TestHandleSwitchChange:
         controller._state = RadioState(
             selected_channel_index=0,
             switch_position=SwitchPosition.ON,
-            is_stream_active=True,
         )
 
         controller.handle_switch_change(SwitchPosition.OFF)

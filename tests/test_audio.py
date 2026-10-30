@@ -283,8 +283,25 @@ class TestIsPlaying:
 
     def test_true_when_active(self, make_player: MakePlayerFixture) -> None:
         player = make_player()
+        stream = FakeMpvPlayer()
+        stream.simulate_stream_playing()
+        player._player = stream
         player._is_stream_active = True
         assert player.is_playing() is True
+
+    def test_false_when_connected_stream_ended(
+        self, make_player: MakePlayerFixture
+    ) -> None:
+        player = make_player()
+        stream = FakeMpvPlayer()
+        stream.simulate_stream_playing()
+        player._player = stream
+        player._is_stream_active = True
+
+        # mpv reports no playback position once the stream has ended
+        stream.playback_time = None
+
+        assert player.is_playing() is False
 
 
 class TestCleanup:
