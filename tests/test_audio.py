@@ -313,8 +313,6 @@ class TestStop:
 
 
 class BlockingReadMpvPlayer(FakeMpvPlayer):
-    """Fake mpv player whose playback position read waits for a release."""
-
     def __init__(self) -> None:
         self.read_started = Event()
         self.release_read = Event()

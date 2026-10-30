@@ -706,9 +706,6 @@ class MpvAudioPlayer:
 
         Covers the reconnect's announcements and connection attempt, but not
         the backoff wait between attempts.
-
-        Returns:
-            True while a reconnect is in progress.
         """
         return self._reconnecting.is_set()
 
