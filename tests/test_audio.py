@@ -378,18 +378,17 @@ class TestIsPlaying:
         stopper = Thread(target=player._stop_stream_for_reconnect, daemon=True)
         reader.start()
         assert stream.read_started.wait(timeout=5.0)
+        lock_held_during_read = player._lock.locked()
         stopper.start()
-        stopper.join(timeout=0.2)
-        stopper_blocked_during_read = stopper.is_alive()
 
         stream.release_read.set()
         reader.join(timeout=5.0)
         stopper.join(timeout=5.0)
 
+        assert lock_held_during_read
         assert not reader.is_alive()
         assert not stopper.is_alive()
         assert stream.calls == ["read finished", "terminate"]
-        assert stopper_blocked_during_read
 
 
 class TestCleanup:
