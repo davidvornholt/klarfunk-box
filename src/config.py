@@ -106,7 +106,6 @@ class WifiSchema(BaseModel):
 
     nmcli_path: str = "nmcli"
     command_timeout_seconds: float = Field(default=5.0, ge=1.0)
-    connect_timeout_seconds: float = Field(default=20.0, ge=5.0)
 
 class BootAnnouncementsSchema(BaseModel):
     """Schema for boot announcement audio files."""
@@ -238,7 +237,6 @@ def load_config(config_path: Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         wifi=WifiConfig(
             nmcli_path=schema.wifi.nmcli_path,
             command_timeout_seconds=schema.wifi.command_timeout_seconds,
-            connect_timeout_seconds=schema.wifi.connect_timeout_seconds,
         ),
         channels=channels,
         default_channel_index=schema.default_channel,

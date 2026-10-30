@@ -85,7 +85,6 @@ class WifiConfig:
 
     nmcli_path: str
     command_timeout_seconds: float
-    connect_timeout_seconds: float
 
 
 @dataclass(frozen=True)

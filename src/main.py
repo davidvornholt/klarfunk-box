@@ -262,7 +262,6 @@ def main() -> int:
     network_manager = NetworkManager(
         nmcli_path=config.wifi.nmcli_path,
         command_timeout_seconds=config.wifi.command_timeout_seconds,
-        connect_timeout_seconds=config.wifi.connect_timeout_seconds,
         internet_check_hosts=config.watchdog.internet_check_hosts,
         internet_check_port=config.watchdog.internet_check_port,
         internet_check_timeout_seconds=config.watchdog.internet_check_timeout_seconds,

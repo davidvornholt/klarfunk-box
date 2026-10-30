@@ -286,7 +286,6 @@ def make_wifi_config() -> WifiConfig:
     return WifiConfig(
         nmcli_path="nmcli",
         command_timeout_seconds=5.0,
-        connect_timeout_seconds=20.0,
     )
 
 
@@ -338,50 +337,3 @@ def make_app_config(audio_dir: Path) -> AppConfig:
         selector_off_announcement=audio_dir / "selector_off.mp3",
         shutdown_announcement=audio_dir / "shutdown.mp3",
     )
-
-
-@pytest.fixture
-def app_config(tmp_audio_files: dict[str, Path]) -> AppConfig:
-    """Create a complete AppConfig with real temp audio files."""
-    return make_app_config(tmp_audio_files["audio_dir"])
-
-
-# ---------------------------------------------------------------------------
-# Mock service fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def fake_gpio_instance() -> FakeGpio:
-    """Create a fresh FakeGpio instance."""
-    return FakeGpio()
-
-
-@pytest.fixture
-def mock_audio_player() -> MagicMock:
-    """Create a mock AudioPlayer with default return values."""
-    from src.audio import AudioPlayer
-
-    mock = MagicMock(spec=AudioPlayer)
-    mock.play_announcement.return_value = True
-    mock.play_stream.return_value = True
-    mock.play_announcement_with_stream_preload.return_value = True
-    mock.is_playing.return_value = False
-    return mock
-
-
-@pytest.fixture
-def mock_network_manager() -> MagicMock:
-    """Create a mock NetworkManager with connected status."""
-    from src.network import ConnectivityStatus, NetworkManager, Result
-
-    mock = MagicMock(spec=NetworkManager)
-    mock.check_connectivity.return_value = ConnectivityStatus(
-        is_connected=True,
-        connectivity="full",
-        reason="connected",
-    )
-    mock.get_active_wifi.return_value = Result(value=None, error=None)
-    mock.list_saved_wifi.return_value = Result(value=(), error=None)
-    mock.connect_to_saved_wifi.return_value = Result(value=True, error=None)
-    return mock
