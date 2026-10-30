@@ -130,14 +130,12 @@ class RadioState:
 
     selected_channel_index: int
     switch_position: SwitchPosition
-    is_stream_active: bool
 
     def with_channel(self, index: int) -> RadioState:
         """Return new state with updated channel."""
         return RadioState(
             selected_channel_index=index,
             switch_position=self.switch_position,
-            is_stream_active=self.is_stream_active,
         )
 
     def with_switch(self, position: SwitchPosition) -> RadioState:
@@ -145,13 +143,4 @@ class RadioState:
         return RadioState(
             selected_channel_index=self.selected_channel_index,
             switch_position=position,
-            is_stream_active=self.is_stream_active,
-        )
-
-    def with_stream_active(self, active: bool) -> RadioState:
-        """Return new state with updated stream status."""
-        return RadioState(
-            selected_channel_index=self.selected_channel_index,
-            switch_position=self.switch_position,
-            is_stream_active=active,
         )

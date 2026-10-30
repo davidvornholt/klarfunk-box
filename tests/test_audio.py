@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from threading import Thread
+from threading import Event, Thread
 from unittest.mock import MagicMock
 
 import pytest
@@ -217,6 +217,42 @@ class TestWatchdogReconnect:
         assert player._watchdog_thread is watchdog
         player.stop()
 
+    def test_reports_reconnecting_until_reconnect_ends(
+        self, make_player: MakePlayerFixture, mocker: MockerFixture
+    ) -> None:
+        """A stall reconnect is reported until its connection attempt has ended."""
+        mocker.patch("src.audio.mpv.MPV", side_effect=FakeMpvPlayer)
+        player = make_player(
+            retry_config=make_retry_config(max_attempts=1),
+            watchdog_config=make_watchdog_config(
+                enabled=True, check_interval_seconds=0.05, stall_seconds=5.0
+            ),
+        )
+        announcing = Event()
+        release_announcement = Event()
+
+        def hold_announcement() -> None:
+            announcing.set()
+            release_announcement.wait(timeout=5.0)
+
+        mocker.patch.object(
+            player, "play_retrying_announcement", side_effect=hold_announcement
+        )
+        assert player.play_stream("http://example.com/stream") is True
+        stream = player._player
+        assert isinstance(stream, FakeMpvPlayer)
+
+        stream.simulate_end_file("error")
+        assert announcing.wait(timeout=5.0)
+        playing_during_announcement = player.is_playing()
+        reconnecting_during_announcement = player.is_reconnecting()
+        release_announcement.set()
+
+        assert wait_until(lambda: player.is_playing() and not player.is_reconnecting())
+        player.stop()
+        assert playing_during_announcement is False
+        assert reconnecting_during_announcement is True
+
 
 class TestStopInternal:
     def test_clear_desired_true(self, make_player: MakePlayerFixture) -> None:
@@ -276,6 +312,29 @@ class TestStop:
         mock_mpv.terminate.assert_called()
 
 
+class BlockingReadMpvPlayer(FakeMpvPlayer):
+    def __init__(self) -> None:
+        self.read_started = Event()
+        self.release_read = Event()
+        self.calls: list[str] = []
+        super().__init__()
+
+    @property
+    def playback_time(self) -> float | None:
+        self.read_started.set()
+        self.release_read.wait(timeout=5.0)
+        self.calls.append("read finished")
+        return self._playback_time
+
+    @playback_time.setter
+    def playback_time(self, value: float | None) -> None:
+        self._playback_time = value
+
+    def terminate(self) -> None:
+        self.calls.append("terminate")
+        super().terminate()
+
+
 class TestIsPlaying:
     def test_false_when_no_stream(self, make_player: MakePlayerFixture) -> None:
         player = make_player()
@@ -283,8 +342,51 @@ class TestIsPlaying:
 
     def test_true_when_active(self, make_player: MakePlayerFixture) -> None:
         player = make_player()
+        stream = FakeMpvPlayer()
+        stream.simulate_stream_playing()
+        player._player = stream
         player._is_stream_active = True
         assert player.is_playing() is True
+
+    def test_false_when_connected_stream_ended(
+        self, make_player: MakePlayerFixture
+    ) -> None:
+        player = make_player()
+        stream = FakeMpvPlayer()
+        stream.simulate_stream_playing()
+        player._player = stream
+        player._is_stream_active = True
+
+        # mpv reports no playback position once the stream has ended
+        stream.playback_time = None
+
+        assert player.is_playing() is False
+
+    def test_reconnect_does_not_terminate_during_read(
+        self, make_player: MakePlayerFixture
+    ) -> None:
+        """The watchdog must not terminate mpv while is_playing() reads from it."""
+        player = make_player()
+        stream = BlockingReadMpvPlayer()
+        stream.simulate_stream_playing()
+        player._player = stream
+        player._is_stream_active = True
+
+        reader = Thread(target=player.is_playing, daemon=True)
+        stopper = Thread(target=player._stop_stream_for_reconnect, daemon=True)
+        reader.start()
+        assert stream.read_started.wait(timeout=5.0)
+        lock_held_during_read = player._lock.locked()
+        stopper.start()
+
+        stream.release_read.set()
+        reader.join(timeout=5.0)
+        stopper.join(timeout=5.0)
+
+        assert lock_held_during_read
+        assert not reader.is_alive()
+        assert not stopper.is_alive()
+        assert stream.calls == ["read finished", "terminate"]
 
 
 class TestCleanup:
