@@ -310,7 +310,7 @@ class MpvAudioPlayer:
 
     def _handle_stream_stall(self, stream_url: str) -> None:
         # Set before the stream stops, so it counts as playing or reconnecting
-        # throughout, and cleared before the backoff wait between attempts.
+        # throughout.
         self._reconnecting.set()
         try:
             has_internet = self._reconnect_stream(stream_url)

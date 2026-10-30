@@ -15,7 +15,6 @@ from tests.conftest import make_app_config
 
 
 def wait_for_worker(controller: RadioController) -> None:
-    """Wait until the dispatched audio task has finished."""
     worker = controller._worker_thread
     assert worker is not None
     worker.join(timeout=2.0)

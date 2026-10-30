@@ -75,11 +75,7 @@ class RadioController:
         return None
 
     def _is_channel_running(self) -> bool:
-        """Check whether the selected channel is starting, playing, or reconnecting.
-
-        Asks the worker and the player for their live state instead of
-        keeping a flag, which would stay set after the stream dies.
-        """
+        """Check whether the selected channel is starting, playing, or reconnecting."""
         worker = self._worker_thread
         is_starting = worker is not None and worker.is_alive()
         return is_starting or self._audio.is_playing() or self._audio.is_reconnecting()
