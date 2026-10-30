@@ -269,52 +269,28 @@ class TestBackoff:
 
 
 class TestConvenienceAnnouncements:
-    """Test that convenience methods delegate to play_announcement."""
+    """Test that convenience methods play their configured announcement file."""
 
-    def test_play_goodbye(
-        self, make_player: MakePlayerFixture, mocker: MockerFixture
+    @pytest.mark.parametrize(
+        ("method_name", "audio_file_key"),
+        [
+            ("play_goodbye_announcement", "goodbye"),
+            ("play_selector_off_announcement", "selector_off"),
+            ("play_shutdown_announcement", "shutdown"),
+            ("play_retrying_announcement", "retrying"),
+            ("play_failed_announcement", "failed"),
+            ("play_no_internet_announcement", "no_internet"),
+        ],
+    )
+    def test_plays_configured_file(
+        self,
+        make_player: MakePlayerFixture,
+        mocker: MockerFixture,
+        audio_files: dict[str, Path],
+        method_name: str,
+        audio_file_key: str,
     ) -> None:
         player = make_player()
         mock_play = mocker.patch.object(player, "play_announcement", return_value=True)
-        player.play_goodbye_announcement()
-        mock_play.assert_called_once()
-
-    def test_play_selector_off(
-        self, make_player: MakePlayerFixture, mocker: MockerFixture
-    ) -> None:
-        player = make_player()
-        mock_play = mocker.patch.object(player, "play_announcement", return_value=True)
-        player.play_selector_off_announcement()
-        mock_play.assert_called_once()
-
-    def test_play_shutdown(
-        self, make_player: MakePlayerFixture, mocker: MockerFixture
-    ) -> None:
-        player = make_player()
-        mock_play = mocker.patch.object(player, "play_announcement", return_value=True)
-        player.play_shutdown_announcement()
-        mock_play.assert_called_once()
-
-    def test_play_retrying(
-        self, make_player: MakePlayerFixture, mocker: MockerFixture
-    ) -> None:
-        player = make_player()
-        mock_play = mocker.patch.object(player, "play_announcement", return_value=True)
-        player.play_retrying_announcement()
-        mock_play.assert_called_once_with(player._error_announcements.retrying)
-
-    def test_play_failed(
-        self, make_player: MakePlayerFixture, mocker: MockerFixture
-    ) -> None:
-        player = make_player()
-        mock_play = mocker.patch.object(player, "play_announcement", return_value=True)
-        player.play_failed_announcement()
-        mock_play.assert_called_once_with(player._error_announcements.failed)
-
-    def test_play_no_internet(
-        self, make_player: MakePlayerFixture, mocker: MockerFixture
-    ) -> None:
-        player = make_player()
-        mock_play = mocker.patch.object(player, "play_announcement", return_value=True)
-        player.play_no_internet_announcement()
-        mock_play.assert_called_once_with(player._error_announcements.no_internet)
+        getattr(player, method_name)()
+        mock_play.assert_called_once_with(audio_files[audio_file_key])

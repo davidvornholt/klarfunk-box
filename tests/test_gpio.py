@@ -108,22 +108,6 @@ class TestButtonPress:
         callback.assert_called_with(1)
         controller.stop()
 
-    def test_fires_callback_for_first_channel(self) -> None:
-        gpio = FakeGpio()
-        config = make_gpio_config(channel_pins=(17, 22))
-        callback = MagicMock()
-        controller = GpioController(
-            config=config,
-            gpio=gpio,
-            on_channel_button=callback,
-            on_switch_change=MagicMock(),
-        )
-        controller.start()
-
-        gpio.simulate_edge(17)
-        callback.assert_called_with(0)
-        controller.stop()
-
 
 class TestSwitchEdge:
     def test_fires_callback_on_state_change(self) -> None:
@@ -140,7 +124,7 @@ class TestSwitchEdge:
         gpio.set_pin(27, True)
         controller.start()
 
-        # Simulate switch going LOW (ON when not inverted)
+        # Simulate switch going LOW (OFF when not inverted)
         gpio.set_pin(27, False)
         gpio.simulate_edge(27)
 

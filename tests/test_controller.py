@@ -195,43 +195,41 @@ class TestShutdown:
 
     def test_joins_worker_thread(self, controller_deps: dict) -> None:
         controller = controller_deps["controller"]
+        task_started = Event()
 
-        # Set switch ON and dispatch work to create worker thread
-        controller._state = RadioState(
-            selected_channel_index=0,
-            switch_position=SwitchPosition.ON,
-            is_stream_active=False,
-        )
-        controller.handle_switch_change(SwitchPosition.OFF)
-        time.sleep(0.1)
+        def slow_task() -> None:
+            task_started.set()
+            time.sleep(0.5)
+
+        controller._dispatch(slow_task)
+        assert task_started.wait(timeout=2.0)
 
         controller.shutdown()
-        # Worker thread should be joined (not alive)
-        if controller._worker_thread is not None:
-            assert not controller._worker_thread.is_alive()
+
+        # shutdown() waits for the running task instead of leaving it behind
+        assert controller._worker_thread is not None
+        assert not controller._worker_thread.is_alive()
 
 
 class TestDispatch:
     def test_cancels_previous_operation(self, controller_deps: dict) -> None:
         controller = controller_deps["controller"]
-        audio = controller_deps["audio"]
 
         task1_started = Event()
         task1_cancelled = Event()
 
         def slow_task() -> None:
             task1_started.set()
-            task1_cancelled.wait(timeout=5.0)
+            if controller._worker_cancel.wait(timeout=5.0):
+                task1_cancelled.set()
 
         controller._dispatch(slow_task)
-        task1_started.wait(timeout=2.0)
+        assert task1_started.wait(timeout=2.0)
 
-        # Dispatch a second task — should cancel the first
+        # Dispatching a second task signals the first one to stop
         controller._dispatch(lambda: None)
-        time.sleep(0.1)
 
-        # First dispatch sets cancel before clearing for second
-        assert audio.stop.called
+        assert task1_cancelled.is_set()
 
     def test_new_task_executes(self, controller_deps: dict) -> None:
         controller = controller_deps["controller"]
