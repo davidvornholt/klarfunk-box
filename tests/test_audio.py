@@ -217,6 +217,42 @@ class TestWatchdogReconnect:
         assert player._watchdog_thread is watchdog
         player.stop()
 
+    def test_reports_reconnecting_until_reconnect_ends(
+        self, make_player: MakePlayerFixture, mocker: MockerFixture
+    ) -> None:
+        """A stall reconnect is reported until its connection attempt has ended."""
+        mocker.patch("src.audio.mpv.MPV", side_effect=FakeMpvPlayer)
+        player = make_player(
+            retry_config=make_retry_config(max_attempts=1),
+            watchdog_config=make_watchdog_config(
+                enabled=True, check_interval_seconds=0.05, stall_seconds=5.0
+            ),
+        )
+        announcing = Event()
+        release_announcement = Event()
+
+        def hold_announcement() -> None:
+            announcing.set()
+            release_announcement.wait(timeout=5.0)
+
+        mocker.patch.object(
+            player, "play_retrying_announcement", side_effect=hold_announcement
+        )
+        assert player.play_stream("http://example.com/stream") is True
+        stream = player._player
+        assert isinstance(stream, FakeMpvPlayer)
+
+        stream.simulate_end_file("error")
+        assert announcing.wait(timeout=5.0)
+        playing_during_announcement = player.is_playing()
+        reconnecting_during_announcement = player.is_reconnecting()
+        release_announcement.set()
+
+        assert wait_until(lambda: player.is_playing() and not player.is_reconnecting())
+        player.stop()
+        assert playing_during_announcement is False
+        assert reconnecting_during_announcement is True
+
 
 class TestStopInternal:
     def test_clear_desired_true(self, make_player: MakePlayerFixture) -> None:

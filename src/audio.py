@@ -64,6 +64,10 @@ class AudioPlayer(Protocol):
         """Check if stream is currently playing."""
         ...
 
+    def is_reconnecting(self) -> bool:
+        """Check if the watchdog is reconnecting a dropped stream."""
+        ...
+
     def play_goodbye_announcement(self) -> None:
         """Play goodbye announcement when radio is turned off."""
         ...
@@ -125,6 +129,7 @@ class MpvAudioPlayer:
         self._reconnect_backoff_seconds = self._watchdog_config.reconnect_delay_seconds
         self._watchdog_stop = Event()
         self._watchdog_thread: Thread | None = None
+        self._reconnecting = Event()
 
     def _create_player(self, prefetch: bool = False) -> mpv.MPV:
         """Create a new MPV player instance.
@@ -304,14 +309,30 @@ class MpvAudioPlayer:
                 last_progress_time = time.monotonic()
 
     def _handle_stream_stall(self, stream_url: str) -> None:
+        # Set before the stream stops, so it counts as playing or reconnecting
+        # throughout, and cleared before the backoff wait between attempts.
+        self._reconnecting.set()
+        try:
+            has_internet = self._reconnect_stream(stream_url)
+        finally:
+            self._reconnecting.clear()
+
+        if not has_internet:
+            self._watchdog_stop.wait(self._reconnect_backoff_seconds)
+            self._increase_backoff()
+
+    def _reconnect_stream(self, stream_url: str) -> bool:
+        """Announce and attempt one reconnect of a stalled stream.
+
+        Returns:
+            False if there was no internet connection to reconnect over.
+        """
         self._stop_stream_for_reconnect()
 
         if not self._has_internet():
             logger.warning("No internet connection detected")
             self.play_no_internet_announcement()
-            self._watchdog_stop.wait(self._reconnect_backoff_seconds)
-            self._increase_backoff()
-            return
+            return False
 
         self.play_retrying_announcement()
         success = self._play_stream(stream_url, announce_retry=False)
@@ -320,6 +341,7 @@ class MpvAudioPlayer:
         else:
             self.play_failed_announcement()
             self._increase_backoff()
+        return True
 
     def _increase_backoff(self) -> None:
         self._reconnect_backoff_seconds = min(
@@ -678,6 +700,17 @@ class MpvAudioPlayer:
         """
         with self._lock:
             return self._is_stream_active and self._is_player_playing()
+
+    def is_reconnecting(self) -> bool:
+        """Check if the watchdog is reconnecting a dropped stream.
+
+        Covers the reconnect's announcements and connection attempt, but not
+        the backoff wait between attempts.
+
+        Returns:
+            True while a reconnect is in progress.
+        """
+        return self._reconnecting.is_set()
 
     def cleanup(self) -> None:
         """Clean up resources."""

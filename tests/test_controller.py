@@ -32,6 +32,7 @@ def controller_deps(tmp_audio_files: dict[str, Path]) -> dict[str, object]:
     audio.play_stream.return_value = True
     audio.play_announcement_with_stream_preload.return_value = True
     audio.is_playing.return_value = False
+    audio.is_reconnecting.return_value = False
 
     network = MagicMock()
 
@@ -109,10 +110,13 @@ class TestHandleChannelButton:
 
         assert not audio.play_announcement_with_stream_preload.called
 
-    def test_ignored_while_selected_channel_plays(self, controller_deps: dict) -> None:
+    @pytest.mark.parametrize("live_check", ["is_playing", "is_reconnecting"])
+    def test_ignored_while_selected_channel_plays(
+        self, controller_deps: dict, live_check: str
+    ) -> None:
         controller = controller_deps["controller"]
         audio = controller_deps["audio"]
-        audio.is_playing.return_value = True
+        getattr(audio, live_check).return_value = True
         controller.handle_switch_change(SwitchPosition.ON)
         wait_for_worker(controller)
         audio.stop.reset_mock()
