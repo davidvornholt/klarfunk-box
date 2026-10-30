@@ -18,6 +18,7 @@ from src.models import (
     StreamWatchdogConfig,
 )
 from tests.conftest import (
+    FakeMpvPlayer,
     make_audio_config,
     make_retry_config,
     make_watchdog_config,
@@ -25,6 +26,16 @@ from tests.conftest import (
 
 # Type alias for the make_player factory fixture
 type MakePlayerFixture = Callable[..., MpvAudioPlayer]
+
+
+def wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> bool:
+    """Poll a condition until it holds or the timeout expires."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if condition():
+            return True
+        time.sleep(0.01)
+    return condition()
 
 
 @pytest.fixture
@@ -161,6 +172,50 @@ class TestPlayStream:
 
         result = player.play_stream("http://example.com/stream")
         assert result is False
+
+
+class TestWatchdogReconnect:
+    def test_reconnects_stalled_stream_and_keeps_watching(
+        self, make_player: MakePlayerFixture, mocker: MockerFixture
+    ) -> None:
+        """A stall reconnects on the watchdog thread, which then keeps running."""
+        streams: list[FakeMpvPlayer] = []
+
+        def create_stream(**kwargs: object) -> FakeMpvPlayer:
+            stream = FakeMpvPlayer(**kwargs)
+            streams.append(stream)
+            return stream
+
+        mocker.patch("src.audio.mpv.MPV", side_effect=create_stream)
+        player = make_player(
+            retry_config=make_retry_config(max_attempts=1),
+            watchdog_config=make_watchdog_config(
+                enabled=True, check_interval_seconds=0.05, stall_seconds=1.0
+            ),
+        )
+        mocker.patch.object(player, "play_announcement", return_value=True)
+
+        assert player.play_stream("http://example.com/stream") is True
+        # The first stream reached a late position and then stops progressing.
+        streams[0].playback_time = 100.0
+
+        assert wait_until(lambda: len(streams) == 2 and player.is_playing())
+        watchdog = player._watchdog_thread
+        assert watchdog is not None
+
+        # The reconnected stream starts near zero and keeps progressing, so the
+        # watchdog must not treat it as stalled.
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline:
+            streams[1].playback_time = (streams[1].playback_time or 0.0) + 0.5
+            time.sleep(0.05)
+        assert len(streams) == 2
+        assert watchdog.is_alive()
+
+        # When the reconnected stream stalls too, the same watchdog reconnects it.
+        assert wait_until(lambda: len(streams) == 3 and player.is_playing())
+        assert player._watchdog_thread is watchdog
+        player.stop()
 
 
 class TestStopInternal:
