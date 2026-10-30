@@ -670,17 +670,14 @@ class MpvAudioPlayer:
 
         A connected stream counts only while mpv still reports a playback
         position, so a stream that ended is not playing even before the
-        watchdog notices, or when the watchdog is disabled.
+        watchdog notices, or when the watchdog is disabled. The position is
+        read under the lock, so no other thread can terminate mpv mid-read.
 
         Returns:
             True if stream is active and mpv is playing it.
         """
-        player = self._player
-        return (
-            self._is_stream_active
-            and player is not None
-            and self._is_player_playing_instance(player)
-        )
+        with self._lock:
+            return self._is_stream_active and self._is_player_playing()
 
     def cleanup(self) -> None:
         """Clean up resources."""

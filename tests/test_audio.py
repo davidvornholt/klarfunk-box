@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from threading import Thread
+from threading import Event, Thread
 from unittest.mock import MagicMock
 
 import pytest
@@ -276,6 +276,31 @@ class TestStop:
         mock_mpv.terminate.assert_called()
 
 
+class BlockingReadMpvPlayer(FakeMpvPlayer):
+    """Fake mpv player whose playback position read waits for a release."""
+
+    def __init__(self) -> None:
+        self.read_started = Event()
+        self.release_read = Event()
+        self.calls: list[str] = []
+        super().__init__()
+
+    @property
+    def playback_time(self) -> float | None:
+        self.read_started.set()
+        self.release_read.wait(timeout=5.0)
+        self.calls.append("read finished")
+        return self._playback_time
+
+    @playback_time.setter
+    def playback_time(self, value: float | None) -> None:
+        self._playback_time = value
+
+    def terminate(self) -> None:
+        self.calls.append("terminate")
+        super().terminate()
+
+
 class TestIsPlaying:
     def test_false_when_no_stream(self, make_player: MakePlayerFixture) -> None:
         player = make_player()
@@ -302,6 +327,33 @@ class TestIsPlaying:
         stream.playback_time = None
 
         assert player.is_playing() is False
+
+    def test_reconnect_does_not_terminate_during_read(
+        self, make_player: MakePlayerFixture
+    ) -> None:
+        """The watchdog must not terminate mpv while is_playing() reads from it."""
+        player = make_player()
+        stream = BlockingReadMpvPlayer()
+        stream.simulate_stream_playing()
+        player._player = stream
+        player._is_stream_active = True
+
+        reader = Thread(target=player.is_playing, daemon=True)
+        stopper = Thread(target=player._stop_stream_for_reconnect, daemon=True)
+        reader.start()
+        assert stream.read_started.wait(timeout=5.0)
+        stopper.start()
+        stopper.join(timeout=0.2)
+        stopper_blocked_during_read = stopper.is_alive()
+
+        stream.release_read.set()
+        reader.join(timeout=5.0)
+        stopper.join(timeout=5.0)
+
+        assert not reader.is_alive()
+        assert not stopper.is_alive()
+        assert stream.calls == ["read finished", "terminate"]
+        assert stopper_blocked_during_read
 
 
 class TestCleanup:
