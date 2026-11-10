@@ -250,4 +250,4 @@ All announcement audio files use the same timeout: **15 seconds**. If playback d
 
 ## License
 
-MIT License
+[MIT](LICENSE) © David Vornholt
