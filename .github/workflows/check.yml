@@ -1,0 +1,38 @@
+name: Check
+
+# Runs on draft pull requests too, so the required `python` check never
+# comes from a skipped job, which GitHub would count as passing.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # The tests import python-mpv, which loads libmpv on import.
+      - name: Install libmpv
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libmpv2
+
+      # Caching is off because only default-branch runs may save a cache, and
+      # this workflow runs only on pull requests.
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: false
+
+      - run: uv sync --locked
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked pyrefly check
+      - run: uv run --locked pytest
