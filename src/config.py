@@ -107,6 +107,7 @@ class WifiSchema(BaseModel):
     nmcli_path: str = "nmcli"
     command_timeout_seconds: float = Field(default=5.0, ge=1.0)
 
+
 class BootAnnouncementsSchema(BaseModel):
     """Schema for boot announcement audio files."""
 
