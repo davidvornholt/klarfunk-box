@@ -25,9 +25,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends libmpv2
 
-      # Caching is off because only default-branch runs may save a cache, and
-      # this workflow runs only on pull requests.
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv publishes no major-version tags since v8, only immutable
+      # release tags. Caching is off because only default-branch runs may save
+      # a cache, and this workflow runs only on pull requests.
+      - uses: astral-sh/setup-uv@v10.4.0
         with:
           enable-cache: false
 
